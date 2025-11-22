@@ -1,87 +1,127 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from "react";
+import { socket } from "../modules/socket";
+import { FormControl, Input, Button, Box } from "@mui/material";
+import ScrollableFeed from "react-scrollable-feed";
 
-function Chat({ socket, roomId, playerId, messages }) {
-  const [messageInput, setMessageInput] = useState('');
-  const [localMessages, setLocalMessages] = useState(messages || []);
-  const messagesEndRef = useRef(null);
+function Chat({ user, roomID }) {
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState([]);
 
-  useEffect(() => {
-    setLocalMessages(messages || []);
-  }, [messages]);
+  const handleMessage = useCallback((info) => {
+    setMessages((prev) => [...prev, info]);
+  }, []);
 
-  useEffect(() => {
-    const handleNewMessage = (message) => {
-      setLocalMessages(prev => [...prev, message]);
-    };
-
-    socket.on('new-message', handleNewMessage);
-
-    return () => {
-      socket.off('new-message', handleNewMessage);
-    };
-  }, [socket]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [localMessages]);
-
-  const handleSendMessage = (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    
-    if (!messageInput.trim()) return;
+    if (message.trim() !== "") {
+      const info = {
+        roomID,
+        user,
+        message,
+        effects: false,
+      };
+      setMessage("");
+      socket.emit("chat", info);
+    }
+  };
 
-    socket.emit('send-message', {
-      roomId,
-      playerId,
-      message: messageInput.trim()
-    });
+  const validateMessage = () => {
+    const userMsg = document.getElementById("message");
+    if (!/^[^\s]+(\s+[^\s]+)*$/.test(userMsg.value)) {
+      userMsg.setCustomValidity("Message cannot have leading or trailing spaces");
+    } else {
+      userMsg.setCustomValidity("");
+    }
+  };
 
-    setMessageInput('');
+  useEffect(() => {
+    socket.on("chat", handleMessage);
+    return () => {
+      socket.off("chat", handleMessage);
+    };
+  }, [handleMessage]);
+
+  const color = {
+    word: "SlateBlue",
+    win: "green",
+    correct: "green",
+    incorrect: "red",
+    timer: "red",
+    join: "gray",
+    leave: "gray",
+  };
+
+  const font = {
+    join: "italic",
+    leave: "italic",
   };
 
   return (
-    <div className="chat-container">
-      <h3>Chat</h3>
-      
-      <div className="chat-messages">
-        {localMessages.length === 0 ? (
-          <div className="no-messages">No messages yet</div>
-        ) : (
-          localMessages.map(msg => (
-            <div 
-              key={msg.id} 
-              className={`chat-message ${msg.playerId === playerId ? 'own-message' : ''}`}
-            >
-              <div className="message-header">
-                <span className="message-author">{msg.playerName}</span>
-                <span className="message-time">
-                  {new Date(msg.timestamp).toLocaleTimeString([], { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  })}
-                </span>
-              </div>
-              <div className="message-content">{msg.message}</div>
-            </div>
-          ))
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "90%",
+        width: "100%",
+      }}
+    >
+      {/* Input Area on Top */}
+      <Box
+  component="form"
+  onSubmit={handleSubmit}
+  sx={{
+    display: "flex",
+    gap: 1,
+    mb: 1,
+    p: 1,
+    bgcolor: "#f5f5f5",
+    borderRadius: 1,
+    alignItems: "center",
+  }}
+>
+  <FormControl sx={{ flex: 1 }}>
+    <Input
+      type="text"
+      value={message}
+      onChange={(e) => setMessage(e.target.value)}
+      onInput={validateMessage}
+      id="message"
+      name="message"
+      placeholder="Enter your message"
+      fullWidth
+      sx={{
+        bgcolor: "white",
+        px: 1,
+        py: 0.5,
+        borderRadius: 1,
+        border: "1px solid #ccc",
+      }}
+      required
+    />
+  </FormControl>
+  <Button variant="contained" color="primary" type="submit">
+    Send
+  </Button>
+</Box>
 
-      <form onSubmit={handleSendMessage} className="chat-input-form">
-        <input
-          type="text"
-          value={messageInput}
-          onChange={(e) => setMessageInput(e.target.value)}
-          placeholder="Type a message..."
-          className="chat-input"
-          maxLength={200}
-        />
-        <button type="submit" className="btn btn-primary btn-small">
-          Send
-        </button>
-      </form>
-    </div>
+      {/* Messages Area below */}
+      <Box sx={{ flex: 1, overflowY: "auto" }}>
+        <ScrollableFeed forceScroll={true}>
+          {messages.map((info, idx) => (
+            <p
+              key={idx}
+              style={{
+                color: info[2] ? color[info[0]] : "black",
+                fontStyle: info[2] ? font[info[0]] : "normal",
+                margin: "2px 0",
+              }}
+            >
+              {info[2] ? "" : `${info[0]}:`} {info[1]}
+            </p>
+          ))}
+        </ScrollableFeed>
+      </Box>
+    </Box>
   );
 }
 
