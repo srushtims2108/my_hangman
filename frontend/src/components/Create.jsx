@@ -57,8 +57,8 @@ function Create({ user, setUser }) {
     <Box
       sx={{
         display: "flex",
-        height: "80vh",       // slightly reduced height
-        width: "95vw",        // slightly reduced width
+        height: "80vh",
+        width: "95vw",
         margin: "auto",
       }}
     >
@@ -69,7 +69,7 @@ function Create({ user, setUser }) {
         alt="Hangman Banner"
         sx={{
           flex: 1,
-          width: { xs: "100%", md: "48%" },  // slightly smaller
+          width: { xs: "100%", md: "48%" },
           height: "100%",
           objectFit: "cover",
         }}
@@ -83,7 +83,7 @@ function Create({ user, setUser }) {
           flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
-          px: 3,                  // slightly reduced padding
+          px: 3,
         }}
       >
         <Typography
@@ -97,7 +97,7 @@ function Create({ user, setUser }) {
           <FormGroup sx={{ gap: 2 }}>
             <TextField
               label="Username"
-              variant="filled"
+              variant="outlined"   // box-style
               value={state.username}
               onChange={(e) =>
                 setState({ ...state, username: e.target.value })
@@ -106,23 +106,25 @@ function Create({ user, setUser }) {
               helperText={validateUsername(state.username)}
               disabled={submitted}
               required
+              fullWidth
             />
 
             <TextField
               label="Lives"
               type="number"
-              variant="filled"
+              variant="outlined"   // box-style
               value={state.lives}
               onChange={(e) => setState({ ...state, lives: e.target.value })}
               inputProps={{ min: 6, max: 10 }}
               disabled={submitted}
               required
+              fullWidth
             />
 
             <TextField
               label="Rounds"
               type="number"
-              variant="filled"
+              variant="outlined"   // box-style
               value={state.numRounds}
               onChange={(e) =>
                 setState({ ...state, numRounds: e.target.value })
@@ -130,16 +132,17 @@ function Create({ user, setUser }) {
               inputProps={{ min: 1 }}
               disabled={submitted}
               required
+              fullWidth
             />
 
-            <FormControl variant="filled">
+            <FormControl fullWidth variant="outlined" disabled={submitted}>
               <InputLabel>Rotation</InputLabel>
               <Select
                 value={state.rotation}
                 onChange={(e) =>
                   setState({ ...state, rotation: e.target.value })
                 }
-                disabled={submitted}
+                label="Rotation"
                 required
               >
                 <MenuItem value="king">King of the Hill</MenuItem>
@@ -147,14 +150,14 @@ function Create({ user, setUser }) {
               </Select>
             </FormControl>
 
-            <FormControl variant="filled">
+            <FormControl fullWidth variant="outlined" disabled={submitted}>
               <InputLabel>Guess Time (sec)</InputLabel>
               <Select
                 value={state.time}
                 onChange={(e) =>
                   setState({ ...state, time: e.target.value })
                 }
-                disabled={submitted}
+                label="Guess Time (sec)"
                 required
               >
                 {["10", "20", "30", "40", "50", "60", "70", "80", "90", "inf"].map(
@@ -175,6 +178,7 @@ function Create({ user, setUser }) {
                 mt: 2,
                 py: 1.5,
                 fontWeight: "bold",
+                borderRadius: 2,
                 backgroundColor: "#1976d2",
                 "&:hover": { backgroundColor: "#1565c0" },
               }}

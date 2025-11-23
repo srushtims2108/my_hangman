@@ -1,27 +1,38 @@
 import React, { useState, useEffect, useRef } from "react";
 
 function Timer({ gameState, makeGuess }) {
-  const [time, setTime] = useState(gameState.time);
-  const [change, setChange] = useState(false);
-  const timerRef = useRef();
+  const [timeLeft, setTimeLeft] = useState(gameState.time);
+  const timerRef = useRef(null);
 
+  // Reset timer when game state changes (like new round or incorrect guess)
   useEffect(() => {
-    clearTimeout(timerRef.current);
-    setTime(gameState.time);
-    setChange((prev) => !prev);
+    clearInterval(timerRef.current);
+    setTimeLeft(gameState.time);
   }, [gameState.guessedWord, gameState.numIncorrect, gameState.time]);
 
+  // Countdown logic
   useEffect(() => {
-    if (time > 0) {
-      timerRef.current = setTimeout(() => setTime(time - 1), 1000);
-    } else {
-      makeGuess("");
-    }
+    if (timeLeft <= 0) return;
 
-    return () => clearTimeout(timerRef.current);
-  }, [time, change]);
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current);
+          makeGuess(""); // emit empty guess when time runs out
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-  return <>{time !== 0 && <h2>Time Remaining: {time}</h2>}</>;
+    return () => clearInterval(timerRef.current);
+  }, [timeLeft, makeGuess]);
+
+  return (
+    <>
+      {timeLeft > 0 && <h2 className="time-remaining">Time Remaining: {timeLeft}</h2>}
+    </>
+  );
 }
 
 export default Timer;

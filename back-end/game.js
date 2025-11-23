@@ -3,7 +3,6 @@
 
 export function createGame(params) {
   const time = params.time === "inf" ? null : (params.time ? parseInt(params.time) : null);
-
   const username = params.username;
   return {
     players: [username],
@@ -32,12 +31,7 @@ export function createGame(params) {
 
 export function startGame(gameState) {
   gameState.gameStart = true;
-  // if second player exists, choose them; otherwise keep guesser empty
-  if (gameState.players.length > 1) {
-    gameState.guesser = gameState.players[1];
-  } else {
-    gameState.guesser = "";
-  }
+  gameState.guesser = gameState.players.length > 1 ? gameState.players[1] : "";
 }
 
 export function addPlayer(gameState, user) {
@@ -55,7 +49,6 @@ export function removePlayer(gameState, user) {
     delete gameState.right[user];
     delete gameState.wrong[user];
     delete gameState.misses[user];
-    console.log(user, " has left the room");
   } catch (err) {
     console.log("No user found named ", user);
   }
@@ -90,7 +83,6 @@ export function setNewGuesser(gameState) {
 }
 
 export function handleLeave(gameState, username) {
-  // if only two players -> remove leaver and reset to single-player game using remaining player
   if (numPlayers(gameState) === 2) {
     removePlayer(gameState, username);
     const remaining = gameState.players[0];
@@ -102,7 +94,6 @@ export function handleLeave(gameState, username) {
       numRounds: gameState.numRounds,
       time
     });
-    // overwrite gameState
     Object.keys(gameState).forEach(k => delete gameState[k]);
     Object.assign(gameState, res);
     gameState.wins = { [remaining]: 0 };
@@ -112,7 +103,6 @@ export function handleLeave(gameState, username) {
     return;
   }
 
-  // if hanger left
   if (username === gameState.hanger) {
     removePlayer(gameState, username);
     gameState.hanger = gameState.players[0];
@@ -122,21 +112,21 @@ export function handleLeave(gameState, username) {
     return;
   }
 
-  // if guesser left
   if (username === gameState.guesser) {
     setNewGuesser(gameState);
     removePlayer(gameState, username);
     return;
   }
 
-  // normal player leaving
   removePlayer(gameState, username);
 }
 
 export function handleNewRound(gameState, category, word, user) {
   gameState.word = word;
   gameState.category = category;
-  gameState.guessedWord = Array.from(word).map(c => /[a-zA-Z0-9]/.test(c) ? "_" : c).join("");
+  gameState.guessedWord = Array.from(word)
+    .map(c => /[a-zA-Z0-9]/.test(c) ? "_" : c)
+    .join("");
 
   if (gameState.round) {
     if (gameState.rotation === "robin") {
@@ -160,85 +150,70 @@ export function handleNewRound(gameState, category, word, user) {
 export function guess(gameState) {
   const cur = gameState.curGuess;
   let status = null;
+  let winner = null;
 
   if (!cur) {
+    // No guess entered: treat as timer miss
     gameState.numIncorrect += 1;
-    // initialize misses if missing
-    if (!gameState.misses[gameState.guesser]) gameState.misses[gameState.guesser] = 0;
-    gameState.misses[gameState.guesser] += 1;
+    gameState.misses[gameState.guesser] = (gameState.misses[gameState.guesser] || 0) + 1;
     status = "timer";
   } else if (cur.length === 1) {
+    // Single letter guess
     if (!gameState.guessedLetters.includes(cur)) gameState.guessedLetters.push(cur);
     let match = 0;
 
-    for (let i = 0; i < Math.min(gameState.word.length, gameState.guessedWord.length); i++) {
-      const wordLet = gameState.word[i];
-      const guessLet = gameState.guessedWord[i];
-      if (wordLet.toLowerCase() === cur.toLowerCase() && guessLet === "_") {
-        gameState.guessedWord = gameState.guessedWord.substring(0, i) + wordLet + gameState.guessedWord.substring(i + 1);
+    for (let i = 0; i < gameState.word.length; i++) {
+      if (gameState.word[i].toLowerCase() === cur.toLowerCase() && gameState.guessedWord[i] === "_") {
+        gameState.guessedWord =
+          gameState.guessedWord.substring(0, i) +
+          gameState.word[i] +
+          gameState.guessedWord.substring(i + 1);
         match += 1;
       }
     }
 
     if (match === 0) {
       gameState.numIncorrect += 1;
-      if (!gameState.wrong[gameState.guesser]) gameState.wrong[gameState.guesser] = 0;
-      gameState.wrong[gameState.guesser] += 1;
+      gameState.wrong[gameState.guesser] = (gameState.wrong[gameState.guesser] || 0) + 1;
       status = "incorrect";
     } else {
-      if (!gameState.right[gameState.guesser]) gameState.right[gameState.guesser] = 0;
-      gameState.right[gameState.guesser] += 1;
+      gameState.right[gameState.guesser] = (gameState.right[gameState.guesser] || 0) + 1;
       status = "correct";
     }
   } else {
+    // Full word guess
     if (!gameState.guessedWords.includes(cur)) gameState.guessedWords.push(cur);
-
     if (cur.toLowerCase() !== gameState.word.toLowerCase()) {
       gameState.numIncorrect += 1;
-      if (!gameState.wrong[gameState.guesser]) gameState.wrong[gameState.guesser] = 0;
-      gameState.wrong[gameState.guesser] += 1;
+      gameState.wrong[gameState.guesser] = (gameState.wrong[gameState.guesser] || 0) + 1;
       status = "incorrect";
     }
   }
 
- const wordSolved = (
-  gameState.word &&
-  gameState.word.toLowerCase() === (gameState.guessedWord || "").toLowerCase()
-);
-const failed = gameState.numIncorrect === gameState.lives;
-const directWin = (
-  cur && cur.toLowerCase() === (gameState.word || "").toLowerCase()
-);
+  const wordSolved = gameState.word.toLowerCase() === gameState.guessedWord.toLowerCase();
+  const failed = gameState.numIncorrect >= gameState.lives;
+  const directWin = cur.toLowerCase() === gameState.word.toLowerCase();
 
-if (wordSolved || failed || directWin) {
-  if (failed) {
-    if (!status) status = "incorrect";
-    if (!gameState.wins[gameState.hanger]) gameState.wins[gameState.hanger] = 0;
-    gameState.wins[gameState.hanger] += 1;
+  if (wordSolved || failed || directWin) {
+    if (failed) {
+      status = status || "failed";
+      gameState.wins[gameState.hanger] = (gameState.wins[gameState.hanger] || 0) + 1;
+      winner = gameState.hanger;
+    } else {
+      status = status || "win";
+      gameState.wins[gameState.guesser] = (gameState.wins[gameState.guesser] || 0) + 1;
+      winner = gameState.guesser;
+    }
+
+    // Immediately reset round fields for next round (frontend should reflect instantly)
+    gameState.category = "";
+    gameState.guessedWord = "";
+    gameState.guessedLetters = [];
+    gameState.guessedWords = [];
   } else {
-    if (!status) status = "win";
-    if (!gameState.wins[gameState.guesser]) gameState.wins[gameState.guesser] = 0;
-    gameState.wins[gameState.guesser] += 1;
+    // Round continues: pick next guesser
+    setNewGuesser(gameState);
   }
 
-  // *** ROUND WINNER POPUP EMIT ***
-  const winner = failed ? gameState.hanger : gameState.guesser;
-
-  io.to(gameState.roomID).emit("round-ended", {
-    winner,
-    word: gameState.word,
-    round: gameState.round
-  });
-
-  // reset round fields AFTER popup
-  gameState.category = "";
-  gameState.guessedWord = "";
-  gameState.guessedLetters = [];
-  gameState.guessedWords = [];
-} else {
-  setNewGuesser(gameState);
-}
-
-return status;
-
+  return { status, winner };
 }

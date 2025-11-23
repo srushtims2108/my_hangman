@@ -11,7 +11,7 @@ import "../css/Main.scss";
 // Theme configuration
 const theme = createTheme({
   typography: {
-    fontFamily: ["Yeon Sung", "Sans Serif"].join(","),
+    fontFamily: ["Bangers", "sans-serif"].join(","),
     h3: {
       letterSpacing: "2px",
     },

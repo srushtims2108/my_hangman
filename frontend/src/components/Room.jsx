@@ -14,24 +14,66 @@ import {
   List,
   ListItem,
   ListItemText,
+  Chip,
+  Divider,
+  IconButton,
+  Tooltip,
 } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 
+/* --------------------------------------------------
+   COPY ROOM ID COMPONENT
+-------------------------------------------------- */
+function CopyRoomID({ roomID }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(roomID);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Tooltip title={copied ? "Copied!" : "Copy Room Code"}>
+      <IconButton size="small" color="primary" onClick={handleCopy}>
+        <ContentCopyIcon fontSize="small" />
+      </IconButton>
+    </Tooltip>
+  );
+}
+
+/* --------------------------------------------------
+   MAIN ROOM COMPONENT
+-------------------------------------------------- */
 function Room({ username, mute }) {
   const [gameState, setGameState] = useState(null);
   const [user, setUser] = useState(username || "");
   const { roomID } = useParams();
+
+  // ---------------- JOIN SOCKET ROOM ----------------
+  useEffect(() => {
+    if (roomID) {
+      socket.emit("joinRoom", roomID);
+    }
+  }, [roomID]);
+
   const [err, setErr] = useState(false);
 
-  /** ---------------- PLAYER LEAVE ---------------- */
+  // ---------------- NOTIFICATION ----------------
+  const [notification, setNotification] = useState("");
+
+  const showNotification = (msg) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(""), 2500);
+  };
+
+  // ---------------- PLAYER LEAVE ----------------
   const handleLeave = useCallback((newState) => {
-    if (!newState?.players?.length) {
-      setErr(true);
-    } else {
-      setGameState({ ...newState });
-    }
+    if (!newState?.players?.length) setErr(true);
+    else setGameState({ ...newState });
   }, []);
 
-  /** ---------------- INITIAL STATE FETCH ---------------- */
+  // ---------------- INITIAL FETCH ----------------
   useEffect(() => {
     const getGameState = async () => {
       try {
@@ -51,15 +93,12 @@ function Room({ username, mute }) {
     };
 
     socket.on("leave", handleLeave);
-
     getGameState();
 
-    return () => {
-      socket.off("leave", handleLeave);
-    };
+    return () => socket.off("leave", handleLeave);
   }, [roomID, handleLeave]);
 
-  /** ---------------- LEAVE ON CLOSE ---------------- */
+  // ---------------- LEAVE ON TAB CLOSE ----------------
   useEffect(() => {
     const cleanup = () => {
       if (user) socket.emit("leave", { user, roomID });
@@ -68,12 +107,11 @@ function Room({ username, mute }) {
     return () => window.removeEventListener("unload", cleanup);
   }, [user, roomID]);
 
-  /** ---------------- CONTENT SWITCHER ---------------- */
+  // ---------------- CONTENT LOGIC ----------------
   const renderContent = () => {
     if (err) return <Typography color="error">Room does not exist</Typography>;
     if (!gameState) return <Typography>Loading...</Typography>;
 
-    // before game starts
     if (!user || !gameState.gameStart) {
       return (
         <Wait
@@ -83,11 +121,11 @@ function Room({ username, mute }) {
           setGameState={setGameState}
           setUser={setUser}
           mute={mute}
+          showNotification={showNotification}
         />
       );
     }
 
-    // active game
     if (gameState.gameStart && gameState.category !== "") {
       return (
         <Game
@@ -96,11 +134,11 @@ function Room({ username, mute }) {
           gameState={gameState}
           setGameState={setGameState}
           mute={mute}
+          showNotification={showNotification}
         />
       );
     }
 
-    // new word screen
     if (gameState.category === "") {
       return (
         <NewWord
@@ -109,6 +147,7 @@ function Room({ username, mute }) {
           user={user}
           roomID={roomID}
           mute={mute}
+          showNotification={showNotification}
         />
       );
     }
@@ -123,72 +162,161 @@ function Room({ username, mute }) {
     <Box
       sx={{
         display: "flex",
-        height: "95vh",
+        height: "100vh",
         width: "96vw",
         px: "8px",
         position: "relative",
       }}
     >
-      {/* ---------------- LEFT PANEL ---------------- */}
+      {/* LEFT PANEL */}
       <Paper
-        elevation={3}
+        elevation={6}
         sx={{
           flex: 1,
           display: "flex",
           flexDirection: "column",
-          p: 2,
+          p: 3,
+          borderRadius: 3,
+          backgroundColor: "#f9f9f9",
           overflowY: "auto",
         }}
       >
-        <Typography variant="h6" textAlign="center" sx={{ mb: 2 }}>
-          🎮 Room Code: {roomID.toUpperCase()}
-        </Typography>
+        {/* ROOM CODE */}
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            mb: 3,
+          }}
+        >
+          <Typography
+            variant="h5"
+            textAlign="center"
+            sx={{
+              fontWeight: "bold",
+              letterSpacing: 1,
+              color: "#1976d2",
+              mr: 1,
+            }}
+          >
+            🎮 Room Code: {roomID.toUpperCase()}
+          </Typography>
 
-        <Typography variant="subtitle1" fontWeight="bold">
+          <CopyRoomID roomID={roomID.toUpperCase()} />
+        </Box>
+
+        {/* PLAYERS LIST */}
+        <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 1 }}>
           Players
         </Typography>
 
         <List dense>
-          {gameState?.players?.map((player) => (
-            <ListItem key={player}>
-              <ListItemText
-                primary={`${player} — ${
-                  (gameState.wins?.[player] || 0) * 30 +
-                  (gameState.right?.[player] || 0) * 15 +
-                  (gameState.wrong?.[player] || 0) * -5 +
-                  (gameState.misses?.[player] || 0) * -5
-                } pts`}
-              />
-            </ListItem>
-          ))}
+          {gameState?.players?.map((player) => {
+            const points =
+              (gameState.wins?.[player] || 0) * 30 +
+              (gameState.right?.[player] || 0) * 15 +
+              (gameState.wrong?.[player] || 0) * -5 +
+              (gameState.misses?.[player] || 0) * -5;
+
+            return (
+              <ListItem
+                key={player}
+                sx={{
+                  mb: 0.5,
+                  borderRadius: 1,
+                  bgcolor:
+                    player === gameState.hanger
+                      ? "rgba(25, 118, 210, 0.1)"
+                      : "transparent",
+                }}
+              >
+                <ListItemText
+                  primary={player}
+                  primaryTypographyProps={{
+                    fontWeight: "medium",
+                    fontSize: "1rem",
+                  }}
+                />
+                <Chip
+                  label={`${points} pts`}
+                  color={points >= 0 ? "primary" : "error"}
+                  size="small"
+                  sx={{ fontWeight: "bold" }}
+                />
+              </ListItem>
+            );
+          })}
         </List>
 
-        <Typography sx={{ mt: 2 }}>
-          <b>Hanger:</b> {gameState?.hanger}
-        </Typography>
-        <Typography>
-          <b>Mode:</b> {mode}
-        </Typography>
-        <Typography>
-          <b>Round:</b> {gameState?.round}
-        </Typography>
+        <Divider sx={{ my: 2 }} />
+
+        {/* GAME INFO */}
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          <Typography>
+            <b>Hanger:</b> {gameState?.hanger}
+          </Typography>
+          <Typography>
+            <b>Mode:</b> {mode}
+          </Typography>
+          <Typography>
+            <b>Round:</b> {gameState?.round}
+          </Typography>
+        </Box>
       </Paper>
 
-      {/* ---------------- CENTER PANEL ---------------- */}
-      <Box sx={{ flex: 2, display: "flex", flexDirection: "column", p: 2 }}>
+      {/* CENTER PANEL */}
+      <Box
+        sx={{
+          flex: 2,
+          display: "flex",
+          flexDirection: "column",
+          p: 2,
+          py: 2,
+          alignItems: "center",
+          textAlign: "center",
+        }}
+      >
         {renderContent()}
+
+        {notification && (
+          <div className="notification-toast">
+            <Typography variant="subtitle1" fontWeight="bold">
+              {notification}
+            </Typography>
+          </div>
+        )}
       </Box>
 
-      {/* ---------------- RIGHT PANEL ---------------- */}
-      <Paper
-        elevation={3}
-        sx={{ flex: 1, display: "flex", flexDirection: "column", p: 2 }}
-      >
-        <Typography variant="h6" textAlign="center" sx={{ mb: 2 }}>
-          💬 Chat
-        </Typography>
-        {user && <Chat user={user} roomID={roomID} />}
-      </Paper>
+{/* RIGHT PANEL */}
+<Paper
+  elevation={6} // match left panel
+  sx={{
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    p: 3, // same padding as left
+    borderRadius: 3, // same rounding
+    backgroundColor: "#f9f9f9", // same background
+    overflowY: "auto",
+  }}
+>
+  <Typography
+    variant="h5"
+    textAlign="center"
+    sx={{
+      fontWeight: "bold",
+      letterSpacing: 1,
+      color: "#1976d2",
+      mb: 2,
+    }}
+  >
+    💬Chat
+  </Typography>
+
+  {user && <Chat user={user} roomID={roomID} />}
+</Paper>
+
     </Box>
   );
 }

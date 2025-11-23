@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { socket } from "../modules/socket";
-import { FormControl, Input, Button, Box } from "@mui/material";
-import ScrollableFeed from "react-scrollable-feed";
+import { FormControl, Input, Button, Typography } from "@mui/material";
 
 function Chat({ user, roomID }) {
   const [message, setMessage] = useState("");
@@ -57,71 +56,66 @@ function Chat({ user, roomID }) {
   };
 
   return (
-    <Box
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        height: "90%",
-        width: "100%",
-      }}
-    >
-      {/* Input Area on Top */}
-      <Box
-  component="form"
-  onSubmit={handleSubmit}
-  sx={{
-    display: "flex",
-    gap: 1,
-    mb: 1,
-    p: 1,
-    bgcolor: "#f5f5f5",
-    borderRadius: 1,
-    alignItems: "center",
-  }}
->
-  <FormControl sx={{ flex: 1 }}>
-    <Input
-      type="text"
-      value={message}
-      onChange={(e) => setMessage(e.target.value)}
-      onInput={validateMessage}
-      id="message"
-      name="message"
-      placeholder="Enter your message"
-      fullWidth
-      sx={{
-        bgcolor: "white",
-        px: 1,
-        py: 0.5,
-        borderRadius: 1,
-        border: "1px solid #ccc",
-      }}
-      required
-    />
-  </FormControl>
-  <Button variant="contained" color="primary" type="submit">
-    Send
-  </Button>
-</Box>
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+      {/* Input + Send Button at the top */}
+      <form
+        onSubmit={handleSubmit}
+        style={{ display: "flex", gap: "8px", alignItems: "center" }}
+      >
+        <FormControl fullWidth>
+          <Input
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onInput={validateMessage}
+            id="message"
+            name="message"
+            placeholder="Enter your message..."
+            required
+            sx={{
+              padding: "8px",
+              fontSize: "14px",
+            }}
+          />
+        </FormControl>
+        <Button
+          type="submit"
+          variant="contained"
+          sx={{
+            backgroundColor: "#1976d2",
+            color: "white",
+            "&:hover": { backgroundColor: "#115293" },
+            textTransform: "none",
+            padding: "8px 16px",
+            fontSize: "14px",
+          }}
+        >
+          Send
+        </Button>
+      </form>
 
-      {/* Messages Area below */}
-      <Box sx={{ flex: 1, overflowY: "auto" }}>
-        <ScrollableFeed forceScroll={true}>
-          {messages.map((info, idx) => (
-            <p
-              key={idx}
-              style={{
-                color: info[2] ? color[info[0]] : "black",
-                fontStyle: info[2] ? font[info[0]] : "normal",
-                margin: "2px 0",
-              }}
-            >
-              {info[2] ? "" : `${info[0]}:`} {info[1]}
-            </p>
-          ))}
-        </ScrollableFeed>
-      </Box>
-    </Box>
+      {/* Messages render normally */}
+      <div>
+        {messages.map((info, idx) => (
+          <Typography
+            key={idx}
+            sx={{
+              color: info[2] ? color[info[0]] : "black",
+              fontStyle: info[2] ? font[info[0]] : "normal",
+              mb: 0.5,
+              wordBreak: "break-word",
+            }}
+          >
+            {!info[2] && (
+              <span style={{ color: "#1976d2", fontWeight: "bold" }}>
+                {info[0]}:
+              </span>
+            )}{" "}
+            {info[1]}
+          </Typography>
+        ))}
+      </div>
+    </div>
   );
 }
 

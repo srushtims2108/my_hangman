@@ -8,20 +8,14 @@ import {
   MenuItem,
   Select,
   Button,
-} from "@mui/material"; // updated path
-
+  Box,
+} from "@mui/material";
 import { socket } from "../modules/socket";
-
 
 const NewRound = ({ gameState, setGameState, roomID, user }) => {
   const [started, setStarted] = useState(false);
 
-  let temp;
-  if (gameState.time === null) {
-    temp = "inf";
-  } else {
-    temp = gameState.time.toString();
-  }
+  let temp = gameState.time === null ? "inf" : gameState.time.toString();
 
   const [state, setState] = useState({
     username: user,
@@ -34,7 +28,6 @@ const NewRound = ({ gameState, setGameState, roomID, user }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     let params = Object.assign({}, state);
-
     const info = { params: params, roomID: roomID, username: user };
     socket.emit("join_new", info);
   };
@@ -64,120 +57,119 @@ const NewRound = ({ gameState, setGameState, roomID, user }) => {
   }, [handleJoin, handleNew]);
 
   return (
-    <div>
+    <Box sx={{ width: "100%", maxWidth: 400, margin: "auto", mt: 2 }}>
       {user !== gameState.players[0] && !started && (
-        <Typography variant="h6">
+        <Typography variant="h6" align="center" sx={{ mb: 1 }}>
           Waiting for {gameState.players[0]} to start the next game...
         </Typography>
       )}
 
       {user !== gameState.players[0] && started && (
-        <p>{gameState.players[0]} is choosing the settings...</p>
+        <Typography variant="body1" align="center" sx={{ mb: 1 }}>
+          {gameState.players[0]} is choosing the settings...
+        </Typography>
       )}
 
       {user === gameState.players[0] && !started && (
-        <Button
-          onClick={onClick}
-          variant="contained"
-          color="primary"
-          type="submit"
-        >
-          Start Next Game
-        </Button>
+        <Box display="flex" justifyContent="center" mt={1}>
+          <Button
+            onClick={onClick}
+            variant="contained"
+            color="primary"
+            size="medium"
+            sx={{ py: 1, px: 3 }}
+          >
+            Start Next Game
+          </Button>
+        </Box>
       )}
 
       {user === gameState.players[0] && started && (
-        <form
-          onSubmit={handleSubmit}
-          style={{ minWidth: "225px", maxWidth: "400px", margin: "auto 0" }}
+        <Box
+          sx={{
+            mt: 2,
+            p: 2,
+            borderRadius: 2,
+            backgroundColor: "#f5f5f5",
+            boxShadow: "0 3px 12px rgba(0,0,0,0.08)",
+          }}
         >
-          <FormGroup>
-            <TextField
-              type="number"
-              label="Lives"
-              value={state.lives}
-              onChange={(e) => setState({ ...state, lives: e.target.value })}
-              id="lives"
-              name="lives"
-              inputProps={{ min: 6, max: 10 }}
-              variant="filled"
-              required
-            />
-            <br />
+          <Typography variant="h5" align="center" fontWeight="bold" mb={1}>
+            Configure Next Round
+          </Typography>
 
-            <TextField
-              type="number"
-              label="Rounds"
-              value={state.numRounds}
-              onChange={(e) =>
-                setState({ ...state, numRounds: e.target.value })
-              }
-              id="numRounds"
-              name="numRounds"
-              inputProps={{ min: 1 }}
-              variant="filled"
-              required
-            />
-            <br />
-
-            <FormControl>
-              <InputLabel id="rotation-label">Rotation</InputLabel>
-              <Select
-                labelId="rotation-label"
-                name="rotation"
-                id="rotation"
-                value={state.rotation}
-                onChange={(e) =>
-                  setState({ ...state, rotation: e.target.value })
-                }
-                variant="filled"
+          <form onSubmit={handleSubmit}>
+            <FormGroup sx={{ gap: 1.5 }}>
+              <TextField
+                type="number"
+                label="Lives"
+                value={state.lives}
+                onChange={(e) => setState({ ...state, lives: e.target.value })}
+                inputProps={{ min: 6, max: 10 }}
+                variant="outlined"
                 required
-              >
-                <MenuItem value="robin">Round Robin</MenuItem>
-                <MenuItem value="king">King of the Hill</MenuItem>
-              </Select>
-            </FormControl>
-            <br />
+                fullWidth
+              />
 
-            <FormControl>
-              <InputLabel id="time-label">Guess Time (sec)</InputLabel>
-              <Select
-                name="time"
-                id="time"
-                labelId="time-label"
-                value={state.time}
-                required
-                variant="filled"
+              <TextField
+                type="number"
+                label="Rounds"
+                value={state.numRounds}
                 onChange={(e) =>
-                  setState({ ...state, time: e.target.value })
+                  setState({ ...state, numRounds: e.target.value })
                 }
+                inputProps={{ min: 1 }}
+                variant="outlined"
+                required
+                fullWidth
+              />
+
+              <FormControl fullWidth variant="outlined" required>
+                <InputLabel>Rotation</InputLabel>
+                <Select
+                  value={state.rotation}
+                  onChange={(e) =>
+                    setState({ ...state, rotation: e.target.value })
+                  }
+                  label="Rotation"
+                >
+                  <MenuItem value="robin">Round Robin</MenuItem>
+                  <MenuItem value="king">King of the Hill</MenuItem>
+                </Select>
+              </FormControl>
+
+              <FormControl fullWidth variant="outlined" required>
+                <InputLabel>Guess Time (sec)</InputLabel>
+                <Select
+                  value={state.time}
+                  onChange={(e) =>
+                    setState({ ...state, time: e.target.value })
+                  }
+                  label="Guess Time (sec)"
+                >
+                  {["10","20","30","40","50","60","70","80","90","inf"].map(
+                    (t) => (
+                      <MenuItem key={t} value={t}>
+                        {t === "inf" ? "Unlimited" : t}
+                      </MenuItem>
+                    )
+                  )}
+                </Select>
+              </FormControl>
+
+              <Button
+                type="submit"
+                variant="contained"
+                color="primary"
+                sx={{ mt: 1.5, py: 1.2, fontWeight: "bold" }}
               >
-                <MenuItem value="10">10</MenuItem>
-                <MenuItem value="20">20</MenuItem>
-                <MenuItem value="30">30</MenuItem>
-                <MenuItem value="40">40</MenuItem>
-                <MenuItem value="50">50</MenuItem>
-                <MenuItem value="60">60</MenuItem>
-                <MenuItem value="70">70</MenuItem>
-                <MenuItem value="80">80</MenuItem>
-                <MenuItem value="90">90</MenuItem>
-                <MenuItem value="inf">Unlimited</MenuItem>
-              </Select>
-            </FormControl>
-
-            <br />
-            <br />
-
-            <Button variant="contained" color="primary" type="submit">
-              Create Game
-            </Button>
-
-            <br />
-            <br />
-          </FormGroup>
-        </form>
+                Create Game
+              </Button>
+            </FormGroup>
+          </form>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 };
 
