@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback} from "react";
 import { FormControl, Input, InputLabel, Typography } from "@mui/material";
 import Letters from "./Letters";
 import Timer from "./Timer";
@@ -40,54 +40,21 @@ function Game({ gameState, setGameState, username, roomID, mute, showNotificatio
     [gameState, setGameState]
   );
 
-  /** ---------------- SOUND FX ---------------- */
-  const updateSong = (src) => {
-    setSource(src);
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.load();
-      audioRef.current.play().catch(() => {});
-    }
-  };
+ 
+const handleStatus = useCallback((info) => {
+  const player = info.user || "Someone";
+  const guess = info.guess || "";
+  let message = "";
 
-  /** ---------------- STATUS HANDLER ---------------- */
-  const handleStatus = useCallback(
-    (info) => {
-      let newURL = "";
-      let message = "";
+  if (info.status === "correct") message = `Hurrah! ${player} guessed "${guess}" correctly`;
+  else if (info.status === "incorrect") message = `Oops! ${player} guessed "${guess}" incorrectly`;
+  else if (info.status === "timer") message = `${player} ran out of time`;
+  else if (info.status === "win") message = `Congratulations ${player}! You completed the word!`;
+  else if (info.status === "fail") message = `Players failed to guess! The word was: "${gameState.word}"`;
 
-      if (info.status === "timer") {
-        newURL = `${process.env.REACT_APP_SERVER}/audio/timer.mp3`;
-        message = `${username} ran out of time`;
-      } else if (info.status === "correct") {
-        newURL = `${process.env.REACT_APP_SERVER}/audio/correct.mp3`;
-        message = `Hurrah! ${username} guessed letter "${info.guess}" correctly`;
-      } else if (info.status === "incorrect") {
-        newURL = `${process.env.REACT_APP_SERVER}/audio/wrong.mp3`;
-        message = `Oops! ${username} guessed letter "${info.guess}" incorrectly`;
-      } else if (info.status === "win") {
-        message = `Congratulations ${username}! You completed the word!`;
-      } else if (info.status === "fail") {
-        newURL = `${process.env.REACT_APP_SERVER}/audio/wrong.mp3`;
-        message = `Players failed to guess! The word was: "${gameState.word}"`;
-      }
+  if (showNotification) showNotification(message);
+}, [showNotification, gameState.word]);
 
-      if (newURL) updateSong(newURL);
-
-      // Show notification toast in Room
-      if (showNotification) showNotification(message);
-
-      // Emit chat message but hide from chat section
-      socket.emit("chat", {
-        roomID,
-        user: info.status,
-        message,
-        effects: true,
-        hide: true,
-      });
-    },
-    [username, roomID, showNotification, gameState.word]
-  );
 
   /** ---------------- SOCKET LISTENERS ---------------- */
   useEffect(() => {
@@ -131,7 +98,12 @@ const makeGuess = (entity) => {
 
   setGameState({ ...gameState, guessedWord: updatedWord, curGuess: entity });
 
-  socket.emit("guess", { roomID, gameState: { ...gameState, curGuess: entity } });
+ socket.emit("guess", { 
+  roomID, 
+  gameState: { ...gameState, curGuess: entity },
+  user: username // <-- add this
+});
+
 };
 
 const onFormSubmit = (e) => {

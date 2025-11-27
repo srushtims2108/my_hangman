@@ -26,6 +26,13 @@ export default function initSocketHandlers(io) {
       if (include) socket.emit("chat", res);
     });
 
+    // Example: broadcast a toast message to all players
+    socket.on("notifyAll", (payload) => {
+      // payload: { roomID, message }
+      io.to(payload.roomID).emit("notification", payload.message);
+    });
+
+
     // CREATE - payload: params (username, lives, rotation, numRounds, time)
     socket.on("create", async (payload) => {
       // generate 10-char roomID
@@ -100,15 +107,23 @@ export default function initSocketHandlers(io) {
       io.to(roomID).emit("update", doc.gameState);
     });
 
-    // GUESS - payload: { gameState, roomID }
-    socket.on("guess", async (payload) => {
-      const status = guess(payload.gameState);
-      await Game.updateOne({ roomID: payload.roomID }, { gameState: payload.gameState });
-      // status event (only to sender)
-      socket.emit("status", { status, guess: payload.gameState.curGuess });
-      // full update to room
-      io.to(payload.roomID).emit("update", payload.gameState);
-    });
+socket.on("guess", async (payload) => {
+  const { gameState, roomID, user } = payload;
+  const status = guess(gameState); // your guess logic
+
+  // Emit status to all clients with the guessing user
+  io.to(roomID).emit("status", { 
+    status, 
+    guess: gameState.curGuess, 
+    user // <-- send the player
+  });
+
+  // Update game state for everyone
+  await Game.updateOne({ roomID }, { gameState });
+  io.to(roomID).emit("update", gameState);
+});
+
+
 
     // LEAVE - payload: { user, roomID }
     socket.on("leave", async (payload) => {

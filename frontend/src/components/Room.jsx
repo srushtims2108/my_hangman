@@ -73,6 +73,16 @@ function Room({ username, mute }) {
     else setGameState({ ...newState });
   }, []);
 
+
+  useEffect(() => {
+  socket.on("notification", (msg) => {
+    showNotification(msg);
+  });
+
+  return () => socket.off("notification");
+}, []);
+
+
   // ---------------- INITIAL FETCH ----------------
   useEffect(() => {
     const getGameState = async () => {
