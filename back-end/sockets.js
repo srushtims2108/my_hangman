@@ -108,20 +108,37 @@ export default function initSocketHandlers(io) {
     });
 
 socket.on("guess", async (payload) => {
-  const { gameState, roomID, user } = payload;
-  const status = guess(gameState); // your guess logic
+  let { user, roomID, gameState } = payload;
 
-  // Emit status to all clients with the guessing user
-  io.to(roomID).emit("status", { 
-    status, 
-    guess: gameState.curGuess, 
-    user // <-- send the player
+  if (!user) {
+    console.warn("Guess received without username");
+    return; // don't fallback to "Unknown"
+  }
+
+  const result = guess(gameState);
+
+  const statusObj = result.correct
+    ? { status: "correct", winner: result.winner || null }
+    : { status: "incorrect", winner: null };
+
+  // Build message including actual username
+  const message =
+    result.correct
+      ? `🎉 ${user} guessed it correctly!`
+      : `Oops!! ${user} guessed it incorrectly!!`;
+
+  io.to(roomID).emit("status", {
+    status: statusObj,
+    guess: gameState.curGuess,
+    user,
+    message,
+    fromServerNotify: true,
   });
 
-  // Update game state for everyone
   await Game.updateOne({ roomID }, { gameState });
   io.to(roomID).emit("update", gameState);
 });
+
 
 
 

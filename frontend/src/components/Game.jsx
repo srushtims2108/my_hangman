@@ -1,37 +1,34 @@
-import React, { useState, useEffect, useRef, useCallback} from "react";
-import { FormControl, Input, InputLabel, Typography } from "@mui/material";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { socket } from "../modules/socket";
+import { Typography, FormControl, InputLabel, Input } from "@mui/material";
 import Letters from "./Letters";
 import Timer from "./Timer";
 import "../css/Game.scss";
-import { socket } from "../modules/socket";
-
 
 const figureMapping = [
-  "none.png",
-  "head.png",
-  "body.png",
-  "left_leg.png",
-  "right_leg.png",
-  "left_arm.png",
-  "right_arm.png",
-  "hair.png",
-  "eyes.png",
-  "nose.png",
-  "mouth.png",
+  "none.png", "head.png", "body.png",
+  "left_leg.png", "right_leg.png", "left_arm.png",
+  "right_arm.png", "hair.png", "eyes.png",
+  "nose.png", "mouth.png",
 ];
 
-function Game({ gameState, setGameState, username, roomID, mute, showNotification }) {
+function Game({ gameState, setGameState, username, roomID, mute }) {
   const [word, setWord] = useState("");
-  const [source, setSource] = useState("");
+  const [notification, setNotification] = useState("");
   const audioRef = useRef(null);
+  const [source, setSource] = useState("");
+
+  /** ---------------- LOCAL NOTIFICATION ---------------- */
+  const showNotification = useCallback((msg) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(""), 4000);
+  }, []);
 
   /** ---------------- GAME STATE UPDATE ---------------- */
   const gameHandler = useCallback(
     (newState) => {
       const roundEnded = gameState && gameState.category !== "" && newState.category === "";
-
       if (roundEnded) {
-        // Delay state update for round-end
         setTimeout(() => setGameState({ ...newState }), 2000);
       } else {
         setGameState({ ...newState });
@@ -40,33 +37,56 @@ function Game({ gameState, setGameState, username, roomID, mute, showNotificatio
     [gameState, setGameState]
   );
 
- 
+  /** ---------------- STATUS HANDLER ---------------- */
+
 const handleStatus = useCallback((info) => {
-  const player = info.user || "Someone";
+  const player = info.user || gameState.guesser || "Someone"; // always a name
   const guess = info.guess || "";
+  const statusObj = info.status || {};
+  const status = statusObj.status || statusObj;
+  const winner = statusObj.winner;
+
   let message = "";
 
-  if (info.status === "correct") message = `Hurrah! ${player} guessed "${guess}" correctly`;
-  else if (info.status === "incorrect") message = `Oops! ${player} guessed "${guess}" incorrectly`;
-  else if (info.status === "timer") message = `${player} ran out of time`;
-  else if (info.status === "win") message = `Congratulations ${player}! You completed the word!`;
-  else if (info.status === "fail") message = `Players failed to guess! The word was: "${gameState.word}"`;
+  switch(status) {
+    case "correct":
+      message = `Hurrah! ${player} guessed "${guess}" correctly`;
+      if (winner) message += ` — the word is completed!`;
+      break;
+    case "wrong":
+    case "incorrect":
+      message = `Oops! ${player} guessed "${guess}" incorrectly`;
+      break;
+    case "timer":
+      message = `${player} ran out of time`;
+      break;
+    case "win":
+      message = `Congratulations ${player}! You completed the word!`;
+      break;
+    case "fail":
+      message = `Players failed to guess! The word was: "${gameState.word}"`;
+      break;
+    default:
+      message = `${player} made a move`;
+  }
 
-  if (showNotification) showNotification(message);
-}, [showNotification, gameState.word]);
+  showNotification(message);
+}, [gameState.word, gameState.guesser, showNotification]);
+
 
 
   /** ---------------- SOCKET LISTENERS ---------------- */
   useEffect(() => {
     socket.on("update", gameHandler);
     socket.on("status", handleStatus);
+
     return () => {
       socket.off("update", gameHandler);
       socket.off("status", handleStatus);
     };
   }, [gameHandler, handleStatus]);
 
-  /** ---------------- INPUT VALIDATION ---------------- */
+  /** ---------------- GUESS HANDLERS ---------------- */
   const validateGuess = () => {
     const field = document.getElementById("guess");
     if (!field) return;
@@ -80,10 +100,7 @@ const handleStatus = useCallback((info) => {
     else field.setCustomValidity("");
   };
 
-  /** ---------------- GUESS HANDLERS ---------------- */
-/** ---------------- GUESS HANDLERS ---------------- */
 const makeGuess = (entity) => {
-  // Update dashed word immediately for single letters or full word guess
   let updatedWord = gameState.guessedWord.split("").map((ch, i) =>
     gameState.guessedWord[i] !== "_" ||
     gameState.word[i].toLowerCase() === entity.toLowerCase()
@@ -91,52 +108,57 @@ const makeGuess = (entity) => {
       : "_"
   ).join("");
 
-  // If user guessed the full word correctly, replace completely
   if (entity.length > 1 && entity.toLowerCase() === gameState.word.toLowerCase()) {
     updatedWord = gameState.word;
   }
 
   setGameState({ ...gameState, guessedWord: updatedWord, curGuess: entity });
 
- socket.emit("guess", { 
-  roomID, 
-  gameState: { ...gameState, curGuess: entity },
-  user: username // <-- add this
-});
-
+  // emit the guess with explicit user name from state
+  socket.emit("guess", { 
+    roomID, 
+    gameState: { ...gameState, curGuess: entity },
+    user: username || gameState.guesser // fallback to current guesser
+  });
 };
 
-const onFormSubmit = (e) => {
-  e.preventDefault();
-  if (word.trim() !== "") {
-    makeGuess(word);
+
+  const onFormSubmit = (e) => {
+    e.preventDefault();
+    if (word.trim() !== "") {
+      makeGuess(word);
+      setWord("");
+    }
+  };
+
+  const onLetterClick = (e) => {
+    e.preventDefault();
+    makeGuess(e.currentTarget.value);
     setWord("");
-  }
-};
+  };
 
-const onLetterClick = (e) => {
-  e.preventDefault();
-  makeGuess(e.currentTarget.value);
-  setWord("");
-};
-
-
-  /** ---------------- AUTO-FILL FULL WORD IF COMPLETELY GUESSED ---------------- */
+  /** ---------------- AUTO-FILL FULL WORD ---------------- */
   useEffect(() => {
-  if (gameState.guessedWord.replace(/_/g, "") === gameState.word) {
-    setGameState((prev) => ({ ...prev, guessedWord: gameState.word }));
-  }
-}, [gameState.guessedWord, gameState.word, setGameState]);
+    if (gameState.guessedWord.replace(/_/g, "") === gameState.word) {
+      setGameState((prev) => ({ ...prev, guessedWord: gameState.word }));
+    }
+  }, [gameState.guessedWord, gameState.word, setGameState]);
 
-
-  /** ---------------- AUDIO ELIGIBILITY ---------------- */
+  /** ---------------- PREV GUESSER FOR AUDIO ---------------- */
   let prevGuesser = gameState.players.indexOf(gameState.guesser);
   do {
     prevGuesser = (prevGuesser - 1 + gameState.players.length) % gameState.players.length;
   } while (gameState.players[prevGuesser] === gameState.hanger);
 
+  /** ---------------- RENDER ---------------- */
   return (
     <div className="game-container">
+      {notification && (
+        <div className="notification-toast">
+          <Typography variant="subtitle1" fontWeight="bold">{notification}</Typography>
+        </div>
+      )}
+
       {/* AUDIO FX */}
       {username === gameState.players[prevGuesser] && source && (
         <audio autoPlay onEnded={() => setSource("")} muted={mute} ref={audioRef}>

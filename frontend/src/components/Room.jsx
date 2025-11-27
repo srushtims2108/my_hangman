@@ -59,28 +59,12 @@ function Room({ username, mute }) {
 
   const [err, setErr] = useState(false);
 
-  // ---------------- NOTIFICATION ----------------
-  const [notification, setNotification] = useState("");
-
-  const showNotification = (msg) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(""), 2500);
-  };
-
+ 
   // ---------------- PLAYER LEAVE ----------------
   const handleLeave = useCallback((newState) => {
     if (!newState?.players?.length) setErr(true);
     else setGameState({ ...newState });
   }, []);
-
-
-  useEffect(() => {
-  socket.on("notification", (msg) => {
-    showNotification(msg);
-  });
-
-  return () => socket.off("notification");
-}, []);
 
 
   // ---------------- INITIAL FETCH ----------------
@@ -131,7 +115,7 @@ function Room({ username, mute }) {
           setGameState={setGameState}
           setUser={setUser}
           mute={mute}
-          showNotification={showNotification}
+          
         />
       );
     }
@@ -143,8 +127,9 @@ function Room({ username, mute }) {
           roomID={roomID}
           gameState={gameState}
           setGameState={setGameState}
+          setUser={setUser} 
           mute={mute}
-          showNotification={showNotification}
+          
         />
       );
     }
@@ -157,7 +142,7 @@ function Room({ username, mute }) {
           user={user}
           roomID={roomID}
           mute={mute}
-          showNotification={showNotification}
+          
         />
       );
     }
@@ -289,13 +274,6 @@ function Room({ username, mute }) {
       >
         {renderContent()}
 
-        {notification && (
-          <div className="notification-toast">
-            <Typography variant="subtitle1" fontWeight="bold">
-              {notification}
-            </Typography>
-          </div>
-        )}
       </Box>
 
 {/* RIGHT PANEL */}
