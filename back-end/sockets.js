@@ -112,29 +112,44 @@ socket.on("guess", async (payload) => {
 
   if (!user) {
     console.warn("Guess received without username");
-    return; // don't fallback to "Unknown"
+    return;
   }
 
-  const result = guess(gameState);
+  const curGuessRaw = gameState.curGuess || "";
+  const curGuess = curGuessRaw.toLowerCase();
+  const word = gameState.word.toLowerCase();
+  const guessedWord = gameState.guessedWord.toLowerCase();
 
-  const statusObj = result.correct
-    ? { status: "correct", winner: result.winner || null }
-    : { status: "incorrect", winner: null };
+  let statusObj;
 
-  // Build message including actual username
-  const message =
-    result.correct
-      ? `🎉 ${user} guessed it correctly!`
-      : `Oops!! ${user} guessed it incorrectly!!`;
+  if (curGuessRaw === "__TIMER_EXPIRED__") {
+    // Special case: player ran out of time
+    statusObj = { status: "timer", winner: false };
+  } else if (curGuess === word) {
+    // Full-word correct guess
+    statusObj = { status: "correct", winner: true };
+  } else if (curGuess.length === 1 && word.includes(curGuess)) {
+    // Single-letter correct guess
+    statusObj = { status: "correct", winner: false };
+  } else {
+    // Incorrect guess
+    statusObj = { status: "incorrect", winner: false };
+  }
 
+  // Update server state only for normal guesses
+  if (curGuessRaw !== "__TIMER_EXPIRED__") {
+    guess(gameState);
+  }
+
+  // Emit status → frontend will display proper toast
   io.to(roomID).emit("status", {
     status: statusObj,
-    guess: gameState.curGuess,
+    guess: curGuessRaw === "__TIMER_EXPIRED__" ? "" : curGuessRaw,
     user,
-    message,
     fromServerNotify: true,
   });
 
+  // Update DB + UI
   await Game.updateOne({ roomID }, { gameState });
   io.to(roomID).emit("update", gameState);
 });

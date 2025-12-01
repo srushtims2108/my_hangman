@@ -19,10 +19,10 @@ function Game({ gameState, setGameState, username, roomID, mute }) {
   const [source, setSource] = useState("");
 
   /** ---------------- LOCAL NOTIFICATION ---------------- */
-  const showNotification = useCallback((msg) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(""), 4000);
-  }, []);
+const showNotification = useCallback((msg, duration = 4000) => {
+  setNotification(msg);
+  setTimeout(() => setNotification(""), duration);
+}, []);
 
   /** ---------------- GAME STATE UPDATE ---------------- */
   const gameHandler = useCallback(
@@ -40,38 +40,79 @@ function Game({ gameState, setGameState, username, roomID, mute }) {
   /** ---------------- STATUS HANDLER ---------------- */
 
 const handleStatus = useCallback((info) => {
-  const player = info.user || gameState.guesser || "Someone"; // always a name
-  const guess = info.guess || "";
+  // === DEBUG: print full incoming payload for inspection ===
+  console.groupCollapsed("handleStatus incoming payload");
+  console.log("RAW info:", info);
+  try {
+    console.log("info (stringified):", JSON.stringify(info));
+  } catch (e) {
+    console.log("info stringify error:", e);
+  }
+  console.groupEnd();
+
+  // Prefer server-provided message if present
+  let message = info.message || "";
+
+  // Safe derived values
+  const player = info.user || gameState.guesser || "Someone";
+  const guess = (typeof info.guess !== "undefined" && info.guess !== null && info.guess !== "")
+    ? info.guess
+    : (gameState.curGuess || "");
+
+  // status may be a string or an object with different property names
   const statusObj = info.status || {};
-  const status = statusObj.status || statusObj;
-  const winner = statusObj.winner;
+  const status = (typeof statusObj === "string")
+    ? statusObj
+    : (statusObj.status || statusObj.result || statusObj.resultType || "");
+  const winner = statusObj && statusObj.winner;
 
-  let message = "";
+  // === DEBUG: show parsed summary ===
+  console.debug("handleStatus parsed ->", { player, guess, status, winner, messageFromServer: !!info.message });
 
-  switch(status) {
+  // Build message only if server didn't provide one
+  if (!message) {
+  switch (status) {
     case "correct":
-      message = `Hurrah! ${player} guessed "${guess}" correctly`;
-      if (winner) message += ` — the word is completed!`;
+      if (winner) {
+        message = `🎉 Hurrah! ${player} guessed the word "${guess}" correctly — the word is completed!`;
+        showNotification(message, 8000); // <- stay longer
+        return;
+      } else if (guess.length === 1) {
+        message = `✅ Hurrah! ${player} guessed "${guess}" correctly`;
+      } else {
+        message = `🎉 ${player} guessed the word "${guess}" correctly`;
+      }
       break;
-    case "wrong":
+
     case "incorrect":
-      message = `Oops! ${player} guessed "${guess}" incorrectly`;
+    case "wrong":
+      message = guess
+        ? `❌ Oops! ${player} guessed "${guess}" incorrectly`
+        : `❌ Oops! ${player} made an incorrect move`;
       break;
+
     case "timer":
-      message = `${player} ran out of time`;
+      message = `⏳ Oops! ${player} ran out of time! The word was "${gameState.word}"`;
       break;
+
     case "win":
-      message = `Congratulations ${player}! You completed the word!`;
-      break;
+      message = `🎊 Congratulations ${player}! You completed the word!`;
+      showNotification(message, 8000);
+      return;
+
     case "fail":
-      message = `Players failed to guess! The word was: "${gameState.word}"`;
+      message = `⚠️ Players failed to guess! The word was: "${gameState.word}"`;
       break;
+
     default:
       message = `${player} made a move`;
   }
+}
 
+  // Show toast notification
   showNotification(message);
-}, [gameState.word, gameState.guesser, showNotification]);
+
+}, [gameState, showNotification]);
 
 
 
@@ -101,24 +142,26 @@ const handleStatus = useCallback((info) => {
   };
 
 const makeGuess = (entity) => {
-  let updatedWord = gameState.guessedWord.split("").map((ch, i) =>
+  // compute updatedWord based on current gameState
+  const updatedWord = gameState.guessedWord.split("").map((ch, i) =>
     gameState.guessedWord[i] !== "_" ||
     gameState.word[i].toLowerCase() === entity.toLowerCase()
       ? gameState.word[i]
       : "_"
   ).join("");
 
-  if (entity.length > 1 && entity.toLowerCase() === gameState.word.toLowerCase()) {
-    updatedWord = gameState.word;
-  }
+  const finalUpdated = (entity.length > 1 && entity.toLowerCase() === gameState.word.toLowerCase())
+    ? gameState.word
+    : updatedWord;
 
-  setGameState({ ...gameState, guessedWord: updatedWord, curGuess: entity });
+  // immediately update local UI
+  setGameState({ ...gameState, guessedWord: finalUpdated, curGuess: entity });
 
-  // emit the guess with explicit user name from state
-  socket.emit("guess", { 
-    roomID, 
-    gameState: { ...gameState, curGuess: entity },
-    user: username || gameState.guesser // fallback to current guesser
+  // IMPORTANT: emit the exact updated state (so server evaluates on correct data)
+  socket.emit("guess", {
+    roomID,
+    user: username || gameState.guesser,
+    gameState: { ...gameState, guessedWord: finalUpdated, curGuess: entity }
   });
 };
 
@@ -168,9 +211,15 @@ const makeGuess = (entity) => {
 
       {/* TOP ROW: TIME + GUESSES REMAINING */}
       <div className="top-row">
-        {username === gameState.guesser && gameState.time && (
-          <Timer gameState={gameState} makeGuess={makeGuess} />
-        )}
+       {username === gameState.guesser && gameState.time && (
+<Timer 
+  key={notification ? Date.now() : 'timer'} // force remount when toast appears/disappears
+  gameState={gameState} 
+  makeGuess={makeGuess} 
+  paused={!!notification} 
+/>
+       )}
+
         <Typography className="guesses-remaining">
           Guesses Remaining: {gameState.lives - gameState.numIncorrect}
         </Typography>
