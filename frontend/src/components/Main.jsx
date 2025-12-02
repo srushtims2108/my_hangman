@@ -1,12 +1,11 @@
 import React, { useState } from "react";
-import { AppBar, Typography, ThemeProvider, CssBaseline, createTheme,Toolbar } from "@mui/material";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AppBar, Typography, ThemeProvider, CssBaseline, createTheme, Toolbar } from "@mui/material";
+import { HashRouter as Router, Routes, Route } from "react-router-dom"; // <-- only this changed
 import ReactGA from "react-ga4";
 import Create from "./Create";  
 import Home from "./Home";
 import Room from "./Room";
 import "../css/Main.scss";
-
 
 // Theme configuration
 const theme = createTheme({
@@ -16,7 +15,6 @@ const theme = createTheme({
       letterSpacing: "2px",
     },
   },
-
 });
 
 // Initialize Google Analytics if key exists
@@ -30,39 +28,39 @@ const Main = () => {
     <ThemeProvider theme={theme}>
       <CssBaseline />
 
-<AppBar
-  position="static"
-  elevation={2} // subtle shadow
-  sx={{
-    backgroundColor: "#ffffff", // white background
-    color: "#333", // text color
-    borderBottom: "1px solid #e0e0e0", // soft divider
-  }}
->
-  <Toolbar>
-    <Typography
-      variant="h5"
-      component="div"
-      sx={{ p: 1, fontWeight: "bold" }}
-    >
-      <a
-        href="/"
-        style={{ textDecoration: "none", color: "inherit" }}
+      <AppBar
+        position="static"
+        elevation={2} // subtle shadow
+        sx={{
+          backgroundColor: "#ffffff", // white background
+          color: "#333", // text color
+          borderBottom: "1px solid #e0e0e0", // soft divider
+        }}
       >
-        Hangmanonline.io
-      </a>
-    </Typography>
-  </Toolbar>
-</AppBar>
+        <Toolbar>
+          <Typography
+            variant="h5"
+            component="div"
+            sx={{ p: 1, fontWeight: "bold" }}
+          >
+            <a
+              href="#/" // <-- hash link to avoid full reload
+              style={{ textDecoration: "none", color: "inherit" }}
+            >
+              Hangmanonline.io
+            </a>
+          </Typography>
+        </Toolbar>
+      </AppBar>
 
       <div className="container">
-        <BrowserRouter>
+        <Router>
           <Routes>
             <Route path="/" element={<Home setUsername={setUsername} />} />
             <Route path="/create" element={<Create setUser={setUsername} user={username} />} />
             <Route path="/:roomID" element={<Room username={username} />} />
           </Routes>
-        </BrowserRouter>
+        </Router>
       </div>
     </ThemeProvider>
   );
