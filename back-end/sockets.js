@@ -18,7 +18,7 @@ export default function initSocketHandlers(io) {
     count++;
     console.log(count, "connected");
 
-    // CHAT - payload: { user, message, effects, roomID }
+    // ---------------- CHAT ----------------
     socket.on("chat", (info) => {
       const res = [info.user, info.message, info.effects];
       const include = info.user !== "join" && info.user !== "leave";
@@ -26,16 +26,8 @@ export default function initSocketHandlers(io) {
       if (include) socket.emit("chat", res);
     });
 
-    // Example: broadcast a toast message to all players
-    socket.on("notifyAll", (payload) => {
-      // payload: { roomID, message }
-      io.to(payload.roomID).emit("notification", payload.message);
-    });
-
-
-    // CREATE - payload: params (username, lives, rotation, numRounds, time)
+    // ---------------- CREATE ----------------
     socket.on("create", async (payload) => {
-      // generate 10-char roomID
       let roomID;
       while (true) {
         roomID = crypto.randomBytes(5).toString("hex").substring(0,10).toUpperCase();
@@ -47,137 +39,171 @@ export default function initSocketHandlers(io) {
       console.log(`${payload.username} has entered the room: ${roomID}`);
 
       const defGameState = createGame(payload);
-      // save to DB
       await Game.updateOne({ roomID }, { roomID, gameState: defGameState }, { upsert: true });
       socket.emit("link", { gameState: defGameState, roomID });
     });
 
-    // JOIN_NEW - payload: { roomID, params }
-    socket.on("join_new", async (payload) => {
-      const doc = await Game.findOne({ roomID: payload.roomID });
-      if (!doc) return;
-      const playerList = doc.gameState.players || [];
-      const defGameState = createGame(payload.params);
-
-      for (const p of playerList) {
-        if (p !== defGameState.hanger) addPlayer(defGameState, p);
-      }
-
-      await Game.updateOne({ roomID: payload.roomID }, { gameState: defGameState });
-      io.to(payload.roomID).emit("join_new", defGameState);
-    });
-
-    // NEW - broadcast new game event
-    socket.on("new", (roomID) => {
-      io.to(roomID).emit("new");
-    });
-
-    // NEW ROUND - payload: { word, roomID, category, user }
-    socket.on("newRound", async (payload) => {
-      const doc = await Game.findOne({ roomID: payload.roomID });
-      if (!doc) return;
-      handleNewRound(doc.gameState, payload.category, payload.word, payload.user);
-      await Game.updateOne({ roomID: payload.roomID }, { gameState: doc.gameState });
-      io.to(payload.roomID).emit("update", doc.gameState);
-    });
-
-    // JOIN ROOM - just join the socket room
-    socket.on("joinRoom", (roomID) => {
-      socket.join(roomID);
-    });
-
-    // JOIN - payload: { user, roomID }
-    socket.on("join", async (credentials) => {
-      const { user, roomID } = credentials;
+    // ---------------- JOIN ----------------
+    socket.on("join", async ({ user, roomID }) => {
       const doc = await Game.findOne({ roomID });
       if (!doc) return;
+
       addPlayer(doc.gameState, user);
       socket.join(roomID);
+
       await Game.updateOne({ roomID }, { gameState: doc.gameState });
       console.log(`${user} has entered the room: ${roomID}`);
       io.to(roomID).emit("update", doc.gameState);
     });
 
-    // START - payload: roomID
+    // ---------------- START ----------------
     socket.on("start", async (roomID) => {
       const doc = await Game.findOne({ roomID });
       if (!doc) return;
+
       startGame(doc.gameState);
       await Game.updateOne({ roomID }, { gameState: doc.gameState });
       io.to(roomID).emit("update", doc.gameState);
     });
 
-socket.on("guess", async (payload) => {
-  let { user, roomID, gameState } = payload;
+    // ---------------- NEW ROUND ----------------
+    socket.on("newRound", async ({ word, category, roomID, user }) => {
+      const doc = await Game.findOne({ roomID });
+      if (!doc) return;
 
-  if (!user) {
-    console.warn("Guess received without username");
-    return;
-  }
+      handleNewRound(doc.gameState, category, word, user);
+      await Game.updateOne({ roomID }, { gameState: doc.gameState });
+      io.to(roomID).emit("update", doc.gameState);
+    });
+
+    // ---------------- GUESS ----------------
+socket.on("guess", async ({ user, roomID, gameState }) => {
+  if (!user) return;
 
   const curGuessRaw = gameState.curGuess || "";
-  const curGuess = curGuessRaw.toLowerCase();
-  const word = gameState.word.toLowerCase();
-  const guessedWord = gameState.guessedWord.toLowerCase();
+  let status = null;
+  let winner = null;
 
-  let statusObj;
+  // Trim whitespace
+  const curGuess = curGuessRaw.trim();
 
-  if (curGuessRaw === "__TIMER_EXPIRED__") {
-    // Special case: player ran out of time
-    statusObj = { status: "timer", winner: false };
-  } else if (curGuess === word) {
-    // Full-word correct guess
-    statusObj = { status: "correct", winner: true };
-  } else if (curGuess.length === 1 && word.includes(curGuess)) {
-    // Single-letter correct guess
-    statusObj = { status: "correct", winner: false };
+  // ---------------- HANDLE TIMER ----------------
+  if (curGuess === "__TIMER_EXPIRED__") {
+    gameState.numIncorrect += 1;
+    gameState.misses[gameState.guesser] = (gameState.misses[gameState.guesser] || 0) + 1;
+    status = "timer";
+  } 
+  // ---------------- SINGLE LETTER ----------------
+  else if (curGuess.length === 1) {
+    const letter = curGuess.toLowerCase();
+    if (!gameState.guessedLetters.includes(letter)) gameState.guessedLetters.push(letter);
+
+    let matchCount = 0;
+    for (let i = 0; i < gameState.word.length; i++) {
+      if (gameState.word[i].toLowerCase() === letter && gameState.guessedWord[i] === "_") {
+        gameState.guessedWord =
+          gameState.guessedWord.substring(0, i) +
+          gameState.word[i] +
+          gameState.guessedWord.substring(i + 1);
+        matchCount++;
+      }
+    }
+
+    if (matchCount === 0) {
+      gameState.numIncorrect += 1;
+      gameState.wrong[gameState.guesser] = (gameState.wrong[gameState.guesser] || 0) + 1;
+      status = "incorrect";
+    } else {
+      gameState.right[gameState.guesser] = (gameState.right[gameState.guesser] || 0) + 1;
+      status = "correct";
+    }
+  } 
+  // ---------------- FULL WORD ----------------
+  else {
+    if (!gameState.guessedWords.includes(curGuess)) gameState.guessedWords.push(curGuess);
+    if (curGuess.toLowerCase() === gameState.word.toLowerCase()) {
+      // Full word correct
+      status = "win";
+      gameState.guessedWord = gameState.word; // reveal full word
+      gameState.right[gameState.guesser] = (gameState.right[gameState.guesser] || 0) + 1;
+    } else {
+      gameState.numIncorrect += 1;
+      gameState.wrong[gameState.guesser] = (gameState.wrong[gameState.guesser] || 0) + 1;
+      status = "incorrect";
+    }
+  }
+
+  // ---------------- CHECK ROUND END ----------------
+  const wordSolved = gameState.guessedWord.toLowerCase() === gameState.word.toLowerCase();
+  const failed = gameState.numIncorrect >= gameState.lives;
+  const directWin = curGuess.toLowerCase() === gameState.word.toLowerCase();
+
+  if (wordSolved || failed || directWin) {
+    if (failed) {
+      winner = gameState.hanger;
+      gameState.wins[winner] = (gameState.wins[winner] || 0) + 1;
+      status = status || "failed";
+    } else {
+      winner = gameState.guesser;
+      gameState.wins[winner] = (gameState.wins[winner] || 0) + 1;
+      status = status || "win";
+    }
+
+    // Reset round for next
+    gameState.category = "";
+    gameState.guessedWord = "";
+    gameState.guessedLetters = [];
+    gameState.guessedWords = [];
   } else {
-    // Incorrect guess
-    statusObj = { status: "incorrect", winner: false };
+    setNewGuesser(gameState);
   }
 
-  // Update server state only for normal guesses
-  if (curGuessRaw !== "__TIMER_EXPIRED__") {
-    guess(gameState);
-  }
-
-  // Emit status → frontend will display proper toast
-  io.to(roomID).emit("status", {
-    status: statusObj,
-    guess: curGuessRaw === "__TIMER_EXPIRED__" ? "" : curGuessRaw,
-    user,
-    fromServerNotify: true,
-  });
-
-  // Update DB + UI
+  // ---------------- UPDATE DB ----------------
   await Game.updateOne({ roomID }, { gameState });
+
+  // ---------------- EMIT TO FRONTEND ----------------
+  io.to(roomID).emit("status", {
+    status,
+    winner,
+    guess: curGuess === "__TIMER_EXPIRED__" ? "" : curGuess,
+    user,
+    fromServerNotify: true
+  });
   io.to(roomID).emit("update", gameState);
 });
 
 
-
-
-    // LEAVE - payload: { user, roomID }
-    socket.on("leave", async (payload) => {
-      const { user, roomID } = payload;
+    // ---------------- LEAVE ----------------
+    socket.on("leave", async ({ user, roomID }) => {
       console.log(`${user} left ${roomID}`);
       const doc = await Game.findOne({ roomID });
       if (!doc) return;
 
       if (numPlayers(doc.gameState) === 1) {
-        // close room by deleting DB entry
         await Game.deleteOne({ roomID });
         io.to(roomID).emit("leave", null);
       } else {
         handleLeave(doc.gameState, user);
         socket.leave(roomID);
+
         await Game.updateOne({ roomID }, { gameState: doc.gameState });
+
         io.to(roomID).emit("leave", doc.gameState);
-        // tell room that user left (chat message)
         io.to(roomID).emit("chat", ["leave", `${user} has left`, true]);
       }
     });
 
+    // ---------------- ROOM JOIN ----------------
+    socket.on("joinRoom", (roomID) => {
+      socket.join(roomID);
+    });
+
+    // ---------------- NEW GAME EVENT ----------------
+    socket.on("new", (roomID) => {
+      io.to(roomID).emit("new");
+    });
+
+    // ---------------- CONNECT / DISCONNECT ----------------
     socket.on("disconnect", () => {
       count--;
       console.log(count, "connected");

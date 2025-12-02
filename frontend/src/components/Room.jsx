@@ -49,23 +49,18 @@ function Room({ username, mute }) {
   const [gameState, setGameState] = useState(null);
   const [user, setUser] = useState(username || "");
   const { roomID } = useParams();
+  const [err, setErr] = useState(false);
 
   // ---------------- JOIN SOCKET ROOM ----------------
   useEffect(() => {
-    if (roomID) {
-      socket.emit("joinRoom", roomID);
-    }
+    if (roomID) socket.emit("joinRoom", roomID);
   }, [roomID]);
 
-  const [err, setErr] = useState(false);
-
- 
   // ---------------- PLAYER LEAVE ----------------
   const handleLeave = useCallback((newState) => {
     if (!newState?.players?.length) setErr(true);
     else setGameState({ ...newState });
   }, []);
-
 
   // ---------------- INITIAL FETCH ----------------
   useEffect(() => {
@@ -75,12 +70,8 @@ function Room({ username, mute }) {
           process.env.REACT_APP_SERVER || "http://localhost:5000";
 
         const res = await axios.get(`${backendURL}/?roomID=${roomID}`);
-
-        if (res.status === 200 && res.data?.players) {
-          setGameState(res.data);
-        } else {
-          setErr(true);
-        }
+        if (res.status === 200 && res.data?.players) setGameState(res.data);
+        else setErr(true);
       } catch {
         setErr(true);
       }
@@ -115,7 +106,6 @@ function Room({ username, mute }) {
           setGameState={setGameState}
           setUser={setUser}
           mute={mute}
-          
         />
       );
     }
@@ -127,9 +117,7 @@ function Room({ username, mute }) {
           roomID={roomID}
           gameState={gameState}
           setGameState={setGameState}
-          setUser={setUser} 
           mute={mute}
-          
         />
       );
     }
@@ -142,7 +130,6 @@ function Room({ username, mute }) {
           user={user}
           roomID={roomID}
           mute={mute}
-          
         />
       );
     }
@@ -176,7 +163,6 @@ function Room({ username, mute }) {
           overflowY: "auto",
         }}
       >
-        {/* ROOM CODE */}
         <Box
           sx={{
             display: "flex",
@@ -273,38 +259,36 @@ function Room({ username, mute }) {
         }}
       >
         {renderContent()}
-
       </Box>
 
-{/* RIGHT PANEL */}
-<Paper
-  elevation={6} // match left panel
-  sx={{
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    p: 3, // same padding as left
-    borderRadius: 3, // same rounding
-    backgroundColor: "#f9f9f9", // same background
-    overflowY: "auto",
-  }}
->
-  <Typography
-    variant="h5"
-    textAlign="center"
-    sx={{
-      fontWeight: "bold",
-      letterSpacing: 1,
-      color: "#1976d2",
-      mb: 2,
-    }}
-  >
-    💬Chat
-  </Typography>
+      {/* RIGHT PANEL */}
+      <Paper
+        elevation={6}
+        sx={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          p: 3,
+          borderRadius: 3,
+          backgroundColor: "#f9f9f9",
+          overflowY: "auto",
+        }}
+      >
+        <Typography
+          variant="h5"
+          textAlign="center"
+          sx={{
+            fontWeight: "bold",
+            letterSpacing: 1,
+            color: "#1976d2",
+            mb: 2,
+          }}
+        >
+          💬Chat
+        </Typography>
 
-  {user && <Chat user={user} roomID={roomID} />}
-</Paper>
-
+        {user && <Chat user={user} roomID={roomID} />}
+      </Paper>
     </Box>
   );
 }
