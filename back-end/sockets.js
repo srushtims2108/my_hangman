@@ -76,6 +76,27 @@ export default function initSocketHandlers(io) {
       io.to(roomID).emit("update", doc.gameState);
     });
 
+    socket.on("join_new", ({ params, roomID, username }) => {
+  const game = games.get(roomID); // however you store your game state
+
+  if (!game) return;
+
+  // Update game state using params
+  game.lives = parseInt(params.lives);
+  game.numRounds = parseInt(params.numRounds);
+  game.rotation = params.rotation;
+  game.time = params.time === "inf" ? null : parseInt(params.time);
+
+  // Reset round-related parts for new game
+  game.currentRound = 1;
+  game.playersGuessed = [];
+  game.turn = 0;
+
+  // Broadcast updated state to everyone in room
+  io.to(roomID).emit("join_new", game);
+});
+
+
     // ---------------- GUESS ----------------
 socket.on("guess", async ({ user, roomID, gameState }) => {
   if (!user) return;
