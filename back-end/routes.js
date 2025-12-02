@@ -20,6 +20,7 @@ router.get("/", async (req, res) => {
     return res.json(doc.gameState);
   } catch (err) {
     console.error("GET / error:", err);
+    // Only send response if headers not sent
     if (!res.headersSent) {
       return res.status(500).json({ error: "Server error" });
     }
@@ -58,4 +59,4 @@ router.post("/feedback", async (req, res) => {
   }
 });
 
-export default routes;
+export default router;
