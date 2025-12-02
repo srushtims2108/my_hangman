@@ -20,39 +20,49 @@ app.use("/", routes);
 
 connectDB()
   .then(() => {
-    const io = new Server(server, { cors: { origin: process.env.CLIENT_ORIGIN || "*" } });
+    const io = new Server(server, {
+      cors: { origin: process.env.CLIENT_ORIGIN || "*" },
+    });
 
+    /** ---------------- SAFE END-ROUND ---------------- */
     async function endRound(roomID, winner, word) {
       console.log("🔥 EMIT: round-ended", { roomID, winner, word });
 
-      // emit popup first
-      io.to(roomID).emit("round-ended", { winner, word });
+      try {
+        // 1️⃣ Emit popup to all clients first
+        io.to(roomID).emit("round-ended", { winner, word });
 
-      // fetch current game state
-      const doc = await Game.findOne({ roomID });
-      if (!doc) return;
-      const gameState = doc.gameState;
+        // 2️⃣ Fetch current game state
+        const doc = await Game.findOne({ roomID }).lean();
+        if (!doc) return;
 
-      // reset round-specific fields
-      gameState.category = "";
-      gameState.word = "";
-      gameState.guessedWord = "";
-      gameState.guessedLetters = [];
-      gameState.guessedWords = [];
+        // 3️⃣ Prepare reset state without mutating the doc
+        const resetGameState = {
+          ...doc.gameState,
+          category: "",
+          word: "",
+          guessedWord: "",
+          guessedLetters: [],
+          guessedWords: [],
+        };
 
-      await Game.updateOne({ roomID }, { gameState });
+        // 4️⃣ Update database immediately (doesn't affect popup)
+        await Game.updateOne({ roomID }, { gameState: resetGameState });
 
-      // delay to allow frontend popup
-      setTimeout(() => {
-        // optionally start next round if auto-rotation
-        if (typeof global.startNextRound === "function") {
-          global.startNextRound(roomID);
-        }
-      }, 3500);
+        // 5️⃣ Delay optional next round to match frontend toast (3.5s)
+        setTimeout(() => {
+          if (typeof global.startNextRound === "function") {
+            global.startNextRound(roomID);
+          }
+        }, 3500); // matches your frontend toast duration + buffer
+      } catch (err) {
+        console.error("endRound error:", err);
+      }
     }
 
     global.endRound = endRound;
 
+    // Initialize socket event handlers
     initSocketHandlers(io);
 
     server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
