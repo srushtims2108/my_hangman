@@ -76,24 +76,26 @@ export default function initSocketHandlers(io) {
       io.to(roomID).emit("update", doc.gameState);
     });
 
-    socket.on("join_new", ({ params, roomID, username }) => {
-  const game = games.get(roomID); // however you store your game state
+  socket.on("join_new", ({ params, roomID, username }) => {
+  // Get current room state
+  const room = get(roomID); // your function for fetching stored room/game
+  const playerList = room.players;
 
-  if (!game) return;
+  // Create the default new game state with host settings
+  const defGameState = createGame(params);
 
-  // Update game state using params
-  game.lives = parseInt(params.lives);
-  game.numRounds = parseInt(params.numRounds);
-  game.rotation = params.rotation;
-  game.time = params.time === "inf" ? null : parseInt(params.time);
+  // Add remaining players except hanger/guesser
+  playerList.forEach(player => {
+    if (player !== defGameState.hanger) {
+      addPlayer(defGameState, player);
+    }
+  });
 
-  // Reset round-related parts for new game
-  game.currentRound = 1;
-  game.playersGuessed = [];
-  game.turn = 0;
+  // Persist game state for room
+  upsert(roomID, defGameState);
 
-  // Broadcast updated state to everyone in room
-  io.to(roomID).emit("join_new", game);
+  // Broadcast updated state to everyone in the room
+  io.to(roomID).emit("join_new", defGameState);
 });
 
 
