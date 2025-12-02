@@ -118,8 +118,9 @@
 
 .image-wrapper {
   width: 550px;  /* slightly bigger */
-  height: 300px; /* slightly bigger */
-  margin: 5px auto; /* center horizontally */
+  height: 360px; /* slightly bigger */
+  margin: 5px auto; /* center horizontally */;
+  align-self: center;
 }
 
 .drawing {

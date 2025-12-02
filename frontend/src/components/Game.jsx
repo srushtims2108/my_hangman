@@ -13,13 +13,29 @@ const figureMapping = [
 function Game({ gameState, setGameState, username, roomID, mute }) {
   const [word, setWord] = useState("");
   const [notification, setNotification] = useState("");
-  const audioRef = useRef(null);
   const [audioSource, setAudioSource] = useState("");
+  const audioRef = useRef(null);
+
+  // refs & state for handling delayed final-state update
+  const toastTimeoutRef = useRef(null);         // manages toast hide timeout
+  const pendingStateRef = useRef(null);         // holds the latest incoming state while toast is visible
+  const applyTimeoutRef = useRef(null);         // manages delay before applying pending state
+  const endRoundPendingRef = useRef(false);     // true when a status event indicates end of round
 
   /** ---------------- NOTIFICATIONS ---------------- */
-  const showNotification = useCallback((msg, duration = 3000) => { // 3 seconds
+  const showNotification = useCallback((msg, duration = 3000) => {
+    // Clear any previous toast timer so newer toasts get full duration
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+
     setNotification(msg);
-    setTimeout(() => setNotification(""), duration);
+
+    toastTimeoutRef.current = setTimeout(() => {
+      setNotification("");
+      toastTimeoutRef.current = null;
+    }, duration);
   }, []);
 
   /** ---------------- STATUS EVENT HANDLER ---------------- */
@@ -53,29 +69,80 @@ function Game({ gameState, setGameState, username, roomID, mute }) {
         msg = `${player} made a move`;
     }
 
-    showNotification(msg, 3000);
+    // Show toast (always 3s per your requirement)
+    const DURATION = 3000;
+    showNotification(msg, DURATION);
 
-    // Play sound effects here if needed
-    if(info.audioSrc) setAudioSource(info.audioSrc);
+    // If this status signals end-of-round, mark it so incoming "update" will be delayed
+    if (status === "win" || status === "failed" || status === "timer") {
+      endRoundPendingRef.current = true;
+
+      // If there is already a pending apply timer, clear it — we'll set it when update arrives
+      if (applyTimeoutRef.current) {
+        clearTimeout(applyTimeoutRef.current);
+        applyTimeoutRef.current = null;
+      }
+    }
+
+    // Play audio if provided
+    if (info.audioSrc) setAudioSource(info.audioSrc);
   }, [gameState.word, showNotification]);
 
   /** ---------------- SOCKET LISTENERS ---------------- */
   useEffect(() => {
-    socket.on("update", (newState) => {
-      setGameState(newState);
-    });
+    // Update handler: apply immediately unless end-of-round was signalled
+    const handleUpdate = (newState) => {
+      // If an end-of-round was signalled by a status event, delay applying the update
+      if (endRoundPendingRef.current) {
+        // store the most recent update while we wait
+        pendingStateRef.current = newState;
 
+        // clear any previously scheduled apply (so only latest state is applied)
+        if (applyTimeoutRef.current) {
+          clearTimeout(applyTimeoutRef.current);
+          applyTimeoutRef.current = null;
+        }
+
+        // schedule applying the pending state after the toast duration (3s)
+        applyTimeoutRef.current = setTimeout(() => {
+          // apply the last pending state
+          if (pendingStateRef.current) {
+            setGameState(pendingStateRef.current);
+            pendingStateRef.current = null;
+          }
+
+          // clear end-of-round marker and timer ref
+          endRoundPendingRef.current = false;
+          applyTimeoutRef.current = null;
+        }, 3000); // matches toast duration
+      } else {
+        // normal (non-final) updates apply immediately
+        setGameState(newState);
+      }
+    };
+
+    socket.on("update", handleUpdate);
     socket.on("status", handleStatus);
 
     return () => {
-      socket.off("update");
-      socket.off("status");
+      socket.off("update", handleUpdate);
+      socket.off("status", handleStatus);
+
+      // cleanup timeouts if component unmounts
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+        toastTimeoutRef.current = null;
+      }
+      if (applyTimeoutRef.current) {
+        clearTimeout(applyTimeoutRef.current);
+        applyTimeoutRef.current = null;
+      }
     };
   }, [handleStatus, setGameState]);
 
   /** ---------------- GUESS HANDLER ---------------- */
   const makeGuess = (entity) => {
-    if(!entity) return;
+    if (!entity) return;
     socket.emit("guess", {
       roomID,
       user: username,
@@ -86,7 +153,7 @@ function Game({ gameState, setGameState, username, roomID, mute }) {
 
   const onFormSubmit = (e) => {
     e.preventDefault();
-    if(word.trim() !== "") makeGuess(word);
+    if (word.trim() !== "") makeGuess(word);
   };
 
   const onLetterClick = (e) => {
@@ -102,7 +169,7 @@ function Game({ gameState, setGameState, username, roomID, mute }) {
       )}
 
       {audioSource && (
-        <audio autoPlay muted={mute} ref={audioRef} onEnded={()=>setAudioSource("")}>
+        <audio autoPlay muted={mute} ref={audioRef} onEnded={() => setAudioSource("")}>
           <source src={audioSource}/>
         </audio>
       )}
@@ -137,7 +204,6 @@ function Game({ gameState, setGameState, username, roomID, mute }) {
 
       {username !== gameState.hanger && (
         <div className="inputs-section">
-          {/* ---------------- KNOW WORD BOX WITH PADDING ---------------- */}
           <Box className="know-word-box" sx={{ p: 2, mb: 2, borderRadius: 1, bgcolor: "#f3f3f3" }}>
             <Typography className="know-word-text" sx={{ mb: 1 }}>
               Know the complete word??
@@ -148,7 +214,7 @@ function Game({ gameState, setGameState, username, roomID, mute }) {
                 <Input
                   type="text"
                   value={word}
-                  onChange={(e)=>setWord(e.target.value)}
+                  onChange={(e) => setWord(e.target.value)}
                   id="guess"
                   maxLength={50}
                   disabled={gameState.guesser !== username}
