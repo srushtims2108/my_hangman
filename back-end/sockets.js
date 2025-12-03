@@ -76,26 +76,36 @@ export default function initSocketHandlers(io) {
       io.to(roomID).emit("update", doc.gameState);
     });
 
-  socket.on("join_new", ({ params, roomID, username }) => {
-  // Get current room state
-  const room = get(roomID); // your function for fetching stored room/game
-  const playerList = room.players;
-
-  // Create the default new game state with host settings
-  const defGameState = createGame(params);
-
-  // Add remaining players except hanger/guesser
-  playerList.forEach(player => {
-    if (player !== defGameState.hanger) {
-      addPlayer(defGameState, player);
+  // ---------------- NEW ROUND / JOIN_NEW ----------------
+socket.on("join_new", async ({ params, roomID, username }) => {
+  try {
+    // 1️⃣ Fetch current room/game state from DB
+    const doc = await Game.findOne({ roomID });
+    if (!doc) {
+      console.log("Room not found:", roomID);
+      return;
     }
-  });
 
-  // Persist game state for room
-  upsert(roomID, defGameState);
+    // 2️⃣ Create a new default game state based on host settings
+    const defGameState = createGame(params);
 
-  // Broadcast updated state to everyone in the room
-  io.to(roomID).emit("join_new", defGameState);
+    // 3️⃣ Add existing players to new game, except hanger
+    doc.gameState.players.forEach(player => {
+      if (player !== defGameState.hanger) {
+        addPlayer(defGameState, player);
+      }
+    });
+
+    // 4️⃣ Persist new game state in DB
+    await Game.updateOne({ roomID }, { gameState: defGameState });
+
+    // 5️⃣ Broadcast updated game state to everyone in room
+    io.to(roomID).emit("join_new", defGameState);
+
+    console.log(`New round started in room ${roomID} by ${username}`);
+  } catch (err) {
+    console.error("Error in join_new:", err);
+  }
 });
 
 

@@ -1,7 +1,11 @@
+// socket.js
 import { io } from "socket.io-client";
 
-const socket = io(process.env.REACT_APP_SERVER || "https://hangman-backend-wsbz.onrender.com", {
-  transports: ["websocket"],
+const BACKEND = process.env.REACT_APP_SERVER || "http://localhost:5000";
+
+const socket = io(BACKEND, {
+  transports: ["websocket", "polling"],
+  autoConnect: true,
 });
 
 export { socket };
